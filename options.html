@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HLS Downloader Settings</title>
+    <link rel="stylesheet" href="options.css">
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                            d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15"
+                            stroke="url(#gradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M7 10L12 15L17 10" stroke="url(#gradient)" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                        <path d="M12 15V3" stroke="url(#gradient)" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                        <defs>
+                            <linearGradient id="gradient" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
+                                <stop offset="0%" stop-color="#8B5CF6" />
+                                <stop offset="100%" stop-color="#6366F1" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                    <div>
+                        <h1>HLS Video Downloader</h1>
+                        <p>Settings & Preferences</p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="main">
+            <div class="settings-container">
+                <!-- Download Settings -->
+                <section class="settings-section">
+                    <h2 class="section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15">
+                            </path>
+                            <path d="M7 10L12 15L17 10"></path>
+                            <path d="M12 15V3"></path>
+                        </svg>
+                        Download Settings
+                    </h2>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <label for="defaultQuality" class="setting-label">Default Quality</label>
+                            <p class="setting-description">Select the default video quality for downloads</p>
+                        </div>
+                        <select id="defaultQuality" class="select-input">
+                            <option value="best">Best Available</option>
+                            <option value="1080p">1080p</option>
+                            <option value="720p">720p</option>
+                            <option value="480p">480p</option>
+                            <option value="360p">360p</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <label for="concurrentDownloads" class="setting-label">Concurrent Downloads</label>
+                            <p class="setting-description">Number of segments to download simultaneously</p>
+                        </div>
+                        <input type="number" id="concurrentDownloads" class="number-input" min="1" max="10" value="3">
+                    </div>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <label for="autoDownload" class="setting-label">Auto Download</label>
+                            <p class="setting-description">Automatically download detected streams</p>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="autoDownload">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </section>
+
+                <!-- Notification Settings -->
+                <section class="settings-section">
+                    <h2 class="section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M18 8C18 6.4087 17.3679 4.88258 16.2426 3.75736C15.1174 2.63214 13.5913 2 12 2C10.4087 2 8.88258 2.63214 7.75736 3.75736C6.63214 4.88258 6 6.4087 6 8C6 15 3 17 3 17H21C21 17 18 15 18 8Z">
+                            </path>
+                            <path
+                                d="M13.73 21C13.5542 21.3031 13.3019 21.5547 12.9982 21.7295C12.6946 21.9044 12.3504 21.9965 12 21.9965C11.6496 21.9965 11.3054 21.9044 11.0018 21.7295C10.6982 21.5547 10.4458 21.3031 10.27 21">
+                            </path>
+                        </svg>
+                        Notifications
+                    </h2>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <label for="showNotifications" class="setting-label">Show Notifications</label>
+                            <p class="setting-description">Display in-page notifications when streams are detected</p>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="showNotifications" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </section>
+
+                <!-- Data Management -->
+                <section class="settings-section">
+                    <h2 class="section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M21 16V8C20.9996 7.64927 20.9071 7.30481 20.7315 7.00116C20.556 6.69751 20.3037 6.44536 20 6.27L13 2.27C12.696 2.09446 12.3511 2.00205 12 2.00205C11.6489 2.00205 11.304 2.09446 11 2.27L4 6.27C3.69626 6.44536 3.44398 6.69751 3.26846 7.00116C3.09294 7.30481 3.00036 7.64927 3 8V16C3.00036 16.3507 3.09294 16.6952 3.26846 16.9988C3.44398 17.3025 3.69626 17.5546 4 17.73L11 21.73C11.304 21.9055 11.6489 21.9979 12 21.9979C12.3511 21.9979 12.696 21.9055 13 21.73L20 17.73C20.3037 17.5546 20.556 17.3025 20.7315 16.9988C20.9071 16.6952 20.9996 16.3507 21 16Z">
+                            </path>
+                        </svg>
+                        Data Management
+                    </h2>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <label class="setting-label">Clear Stream History</label>
+                            <p class="setting-description">Remove all detected streams from storage</p>
+                        </div>
+                        <button class="btn-secondary" id="clearHistory">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M3 6H5H21"></path>
+                                <path
+                                    d="M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6">
+                                </path>
+                            </svg>
+                            Clear History
+                        </button>
+                    </div>
+                </section>
+
+                <!-- About -->
+                <section class="settings-section">
+                    <h2 class="section-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M12 16V12"></path>
+                            <path d="M12 8H12.01"></path>
+                        </svg>
+                        About
+                    </h2>
+
+                    <div class="about-info">
+                        <p><strong>Version:</strong> 1.0.0</p>
+                        <p><strong>Extension:</strong> HLS Video Downloader</p>
+                        <p class="about-description">
+                            Detect and download HLS video streams with ease. Features premium UI,
+                            multiple quality options, and powerful download management.
+                        </p>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="save-status" id="saveStatus">Settings auto-saved</div>
+            <button class="btn-primary" id="saveBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                        d="M19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 2.58579C3.96086 2.21071 4.46957 2 5 2H16L21 7V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21Z">
+                    </path>
+                    <path d="M17 21V13H7V21"></path>
+                    <path d="M7 3V7H15"></path>
+                </svg>
+                Save Settings
+            </button>
+        </footer>
+    </div>
+
+    <script src="options.js"></script>
+</body>
+
+</html>
