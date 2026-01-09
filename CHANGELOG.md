@@ -1,5 +1,28 @@
 # Changelog
 
+## Version 1.0.4 - 2026-01-09
+
+### 🐛 Critical Fix
+- **Fixed Playback Gaps**: Reverted to `.ts` output format to prevent audio/video breaks
+  - TS segments are designed to be concatenatable without gaps
+  - MP4 requires proper remuxing (mux.js) which browser can't do efficiently
+  - Simple concatenation + MP4 label caused timing issues (PTS/DTS problems)
+
+### 📝 Documentation
+- Added FFmpeg conversion guide in README
+- Explained why TS format is used
+- Command for MP4 conversion: `ffmpeg -i video.ts -c copy video.mp4`
+
+### 🎯 Technical Details
+- Blob MIME type: `video/mp4` → `video/mp2t` (reverted)
+- File extension: `.mp4` → `.ts` (reverted)
+- Added comments explaining TS format choice
+
+**Result**: Seamless playback without gaps! Use FFmpeg for MP4 if needed.
+
+---
+
+
 ## Version 1.0.3 - 2026-01-09
 
 ### ✨ Major Features
