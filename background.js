@@ -345,7 +345,9 @@ async function downloadStream(streamId, qualityIndex) {
         }
 
         // Merge segments into single blob
-        const mergedBlob = new Blob(segmentData, { type: 'video/mp4' });
+        // Keep as TS format - TS segments are designed to be concatenatable
+        // MP4 requires proper remuxing which causes gaps if just concatenated
+        const mergedBlob = new Blob(segmentData, { type: 'video/mp2t' });
 
         // Convert blob to base64 data URL (service workers can't use URL.createObjectURL)
         const reader = new FileReader();
@@ -353,7 +355,9 @@ async function downloadStream(streamId, qualityIndex) {
             const base64data = reader.result;
 
             // Trigger download
-            const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.mp4`;
+            // Using .ts format for proper segment concatenation
+            // For MP4 conversion, use: ffmpeg -i video.ts -c copy video.mp4
+            const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.ts`;
 
             chrome.downloads.download({
                 url: base64data,
