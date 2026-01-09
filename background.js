@@ -344,37 +344,86 @@ async function downloadStream(streamId, qualityIndex) {
             }
         }
 
-        // Merge segments into single blob
-        // Keep as TS format - TS segments are designed to be concatenatable
-        // MP4 requires proper remuxing which causes gaps if just concatenated
-        const mergedBlob = new Blob(segmentData, { type: 'video/mp2t' });
+        // Import mux.js for proper TS to MP4 conversion
+        try {
+            importScripts('mux.js');
+        } catch (e) {
+            console.warn('mux.js not loaded, will use simple concatenation');
+        }
 
-        // Convert blob to base64 data URL (service workers can't use URL.createObjectURL)
-        const reader = new FileReader();
-        reader.onloadend = function () {
-            const base64data = reader.result;
+        // Convert TS segments to MP4 using mux.js
+        if (typeof muxjs !== 'undefined') {
+            // Proper remuxing with mux.js
+            const transmuxer = new muxjs.mp4.Transmuxer();
+            const mp4Segments = [];
 
-            // Trigger download
-            // Using .ts format for proper segment concatenation
-            // For MP4 conversion, use: ffmpeg -i video.ts -c copy video.mp4
-            const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.ts`;
-
-            chrome.downloads.download({
-                url: base64data,
-                filename: sanitizeFilename(filename),
-                saveAs: true
-            }, (downloadId) => {
-                if (downloadId) {
-                    downloadProgress[streamId].status = 'completed';
-
-                    chrome.runtime.sendMessage({
-                        type: 'DOWNLOAD_COMPLETED',
-                        streamId: streamId
-                    }).catch(() => { });
-                }
+            transmuxer.on('data', (segment) => {
+                // Combine initialization segment and data
+                const data = new Uint8Array(segment.initSegment.byteLength + segment.data.byteLength);
+                data.set(segment.initSegment, 0);
+                data.set(segment.data, segment.initSegment.byteLength);
+                mp4Segments.push(data);
             });
-        };
-        reader.readAsDataURL(mergedBlob);
+
+            transmuxer.on('done', () => {
+                // Merge all MP4 segments
+                const mergedBlob = new Blob(mp4Segments, { type: 'video/mp4' });
+
+                // Convert to base64 and download
+                const reader = new FileReader();
+                reader.onloadend = function () {
+                    const base64data = reader.result;
+                    const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.mp4`;
+
+                    chrome.downloads.download({
+                        url: base64data,
+                        filename: sanitizeFilename(filename),
+                        saveAs: true
+                    }, (downloadId) => {
+                        if (downloadId) {
+                            downloadProgress[streamId].status = 'completed';
+                            chrome.runtime.sendMessage({
+                                type: 'DOWNLOAD_COMPLETED',
+                                streamId: streamId
+                            }).catch(() => { });
+                        }
+                    });
+                };
+                reader.readAsDataURL(mergedBlob);
+            });
+
+            // Feed TS segments to transmuxer
+            for (const segment of segmentData) {
+                const arrayBuffer = await segment.arrayBuffer();
+                transmuxer.push(new Uint8Array(arrayBuffer));
+            }
+            transmuxer.flush();
+
+        } else {
+            // Fallback: simple concatenation as TS
+            const mergedBlob = new Blob(segmentData, { type: 'video/mp2t' });
+
+            const reader = new FileReader();
+            reader.onloadend = function () {
+                const base64data = reader.result;
+                const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.ts`;
+
+                chrome.downloads.download({
+                    url: base64data,
+                    filename: sanitizeFilename(filename),
+                    saveAs: true
+                }, (downloadId) => {
+                    if (downloadId) {
+                        downloadProgress[streamId].status = 'completed';
+                        chrome.runtime.sendMessage({
+                            type: 'DOWNLOAD_COMPLETED',
+                            streamId: streamId
+                        }).catch(() => { });
+                    }
+                });
+            };
+            reader.readAsDataURL(mergedBlob);
+        }
 
     } catch (error) {
         console.error('Error downloading stream:', error);

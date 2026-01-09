@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "HLS Video Downloader",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "description": "Detect and download HLS video streams with ease. Premium UI and powerful features.",
     "permissions": [
         "storage",
@@ -15,6 +15,17 @@
     "background": {
         "service_worker": "background.js"
     },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "icons/*",
+                "mux.js"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ],
     "content_scripts": [
         {
             "matches": [
@@ -39,15 +50,5 @@
         "16": "icons/icon-16.png",
         "48": "icons/icon-48.png",
         "128": "icons/icon-128.png"
-    },
-    "web_accessible_resources": [
-        {
-            "resources": [
-                "icons/*"
-            ],
-            "matches": [
-                "<all_urls>"
-            ]
-        }
-    ]
+    }
 }
