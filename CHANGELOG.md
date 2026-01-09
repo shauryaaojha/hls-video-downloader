@@ -1,5 +1,28 @@
 # Changelog
 
+## Version 1.0.5 - 2026-01-09
+
+### ✨ Major Feature
+- **Proper MP4 Conversion**: Integrated mux.js library for proper TS-to-MP4 remuxing
+  - No more playback gaps or audio breaks
+  - MP4 files work in all media players (VLC, Windows Media Player, etc.)
+  - Proper codec handling and timing preservation
+
+### 🔧 Technical Implementation
+- Added mux.js library (6.3.0) via CDN
+- Implemented Transmuxer for TS segment conversion
+- Proper MP4 segment initialization and data merging
+- Fallback to .ts format if mux.js fails to load
+
+### 🐛 Fixes
+- Fixed duplicate web_accessible_resources in manifest.json
+- Removed simple concatenation approach
+
+**Result**: Professional-grade MP4 files that play perfectly everywhere! 🎥
+
+---
+
+
 ## Version 1.0.4 - 2026-01-09
 
 ### 🐛 Critical Fix
