@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "HLS Video Downloader",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Detect and download HLS video streams with ease. Premium UI and powerful features.",
     "permissions": [
         "storage",

@@ -1,5 +1,23 @@
 # Changelog
 
+## Version 1.0.3 - 2026-01-09
+
+### ✨ Major Features
+- **MP4 Output**: Downloads now save as `.mp4` instead of `.ts` for universal player compatibility
+- **Master Playlist Only**: Automatically skips segment-specific playlists (chunklist, media_*, numbered playlists)
+- **Better Detection**: Enhanced filtering to show only complete videos, not individual segments
+
+### 🔧 Technical Changes
+- Skip URLs containing `chunklist`, `/media_*`, or `[number].m3u8` patterns
+- Changed blob MIME type from `video/mp2t` to `video/mp4`
+- Improved URL fingerprinting with more pattern matching
+- Filter at web request level for better performance
+
+**Result**: Clean master playlist detection + MP4 files that play everywhere! 🎬
+
+---
+
+
 ## Version 1.0.2 - 2026-01-09
 
 ### 🎯 Major Improvement
