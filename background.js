@@ -3,6 +3,7 @@
 // Store for detected HLS streams
 let detectedStreams = {};
 let downloadProgress = {};
+let detectedUrls = new Set(); // Track URLs to prevent duplicates
 
 // Listen for installation
 chrome.runtime.onInstalled.addListener(() => {
@@ -30,8 +31,30 @@ chrome.webRequest.onCompleted.addListener(
 
 // Detect and store HLS stream
 async function detectHLSStream(details) {
-    const streamId = generateStreamId();
+    const url = details.url;
     const tabId = details.tabId;
+
+    // Create a fingerprint for deduplication
+    const urlFingerprint = getUrlFingerprint(url);
+
+    // Check if we've already detected this stream (or a very similar one)
+    if (detectedUrls.has(urlFingerprint)) {
+        console.log('Duplicate stream detected, ignoring:', url);
+        return;
+    }
+
+    // Check if this is a duplicate based on existing streams
+    for (const existingStream of Object.values(detectedStreams)) {
+        if (isSimilarUrl(existingStream.url, url)) {
+            console.log('Similar stream already exists, ignoring:', url);
+            return;
+        }
+    }
+
+    // Mark this URL as detected
+    detectedUrls.add(urlFingerprint);
+
+    const streamId = generateStreamId();
 
     // Get tab info
     try {
@@ -39,19 +62,20 @@ async function detectHLSStream(details) {
 
         const stream = {
             id: streamId,
-            url: details.url,
+            url: url,
             tabUrl: tab.url,
             tabTitle: tab.title,
             timestamp: Date.now(),
             status: 'detected',
-            qualities: []
+            qualities: [],
+            fingerprint: urlFingerprint
         };
 
         // Store stream
         detectedStreams[streamId] = stream;
 
         // Parse playlist to get qualities
-        parsePlaylist(streamId, details.url);
+        parsePlaylist(streamId, url);
 
         // Update storage
         chrome.storage.local.set({ streams: detectedStreams });
@@ -88,8 +112,25 @@ async function parsePlaylist(streamId, url) {
             const qualities = parseM3U8Master(playlistText, url);
             stream.qualities = qualities;
             stream.type = 'master';
+            stream.isMaster = true;
+
+            // Remove any duplicate media playlists from the same source
+            removeDuplicateMediaPlaylists(url);
         } else {
             // Media playlist (single quality)
+            // Check if there's already a master playlist for this video
+            const hasMaster = Object.values(detectedStreams).some(s =>
+                s.isMaster && s.id !== streamId && isSimilarUrl(s.url, url)
+            );
+
+            if (hasMaster) {
+                // Don't keep this media playlist, we have the master
+                delete detectedStreams[streamId];
+                detectedUrls.delete(stream.fingerprint);
+                console.log('Removed media playlist, master exists:', url);
+                return;
+            }
+
             stream.qualities = [{
                 resolution: 'Unknown',
                 bandwidth: 0,
@@ -97,6 +138,7 @@ async function parsePlaylist(streamId, url) {
                 type: 'media'
             }];
             stream.type = 'media';
+            stream.isMaster = false;
         }
 
         // Update storage
@@ -111,6 +153,29 @@ async function parsePlaylist(streamId, url) {
 
     } catch (error) {
         console.error('Error parsing playlist:', error);
+    }
+}
+
+// Remove duplicate media playlists when we find a master
+function removeDuplicateMediaPlaylists(masterUrl) {
+    const toRemove = [];
+
+    for (const [id, stream] of Object.entries(detectedStreams)) {
+        if (!stream.isMaster && isSimilarUrl(stream.url, masterUrl)) {
+            toRemove.push(id);
+        }
+    }
+
+    toRemove.forEach(id => {
+        const stream = detectedStreams[id];
+        detectedUrls.delete(stream.fingerprint);
+        delete detectedStreams[id];
+    });
+
+    if (toRemove.length > 0) {
+        console.log(`Removed ${toRemove.length} media playlists, master found`);
+        chrome.storage.local.set({ streams: detectedStreams });
+        chrome.action.setBadgeText({ text: Object.keys(detectedStreams).length.toString() });
     }
 }
 
@@ -163,6 +228,31 @@ function resolveUrl(baseUrl, relativeUrl) {
     }
 }
 
+// Get URL fingerprint for deduplication
+function getUrlFingerprint(url) {
+    try {
+        const urlObj = new URL(url);
+        // Use pathname without query params and file extensions for fingerprint
+        let path = urlObj.pathname;
+
+        // Remove common HLS file patterns that change frequently
+        path = path.replace(/\/chunklist.*\.m3u8.*$/, '/chunklist.m3u8');
+        path = path.replace(/\/media.*\.m3u8.*$/, '/media.m3u8');
+        path = path.replace(/\d+\.m3u8/, 'index.m3u8');
+
+        return urlObj.origin + path;
+    } catch (e) {
+        return url;
+    }
+}
+
+// Check if two URLs are similar (same video, different quality/chunk)
+function isSimilarUrl(url1, url2) {
+    const fingerprint1 = getUrlFingerprint(url1);
+    const fingerprint2 = getUrlFingerprint(url2);
+    return fingerprint1 === fingerprint2;
+}
+
 // Listen for messages from popup/content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'GET_STREAMS') {
@@ -172,6 +262,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true });
     } else if (message.type === 'CLEAR_STREAMS') {
         detectedStreams = {};
+        detectedUrls.clear(); // Clear URL fingerprints too
         chrome.storage.local.set({ streams: {} });
         chrome.action.setBadgeText({ text: '' });
         sendResponse({ success: true });
