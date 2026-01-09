@@ -22,7 +22,14 @@ chrome.runtime.onInstalled.addListener(() => {
 // Listen for web requests to detect .m3u8 files
 chrome.webRequest.onCompleted.addListener(
     (details) => {
-        if (details.url.includes('.m3u8')) {
+        const url = details.url;
+        // Only detect m3u8 files, and prefer master playlists
+        if (url.includes('.m3u8') && !url.includes('.ts')) {
+            // Skip chunklist and segment-specific playlists
+            if (url.includes('chunklist') || url.includes('/media_') || url.match(/\d+\.m3u8$/)) {
+                console.log('Skipping segment playlist:', url);
+                return;
+            }
             detectHLSStream(details);
         }
     },
@@ -236,9 +243,10 @@ function getUrlFingerprint(url) {
         let path = urlObj.pathname;
 
         // Remove common HLS file patterns that change frequently
-        path = path.replace(/\/chunklist.*\.m3u8.*$/, '/chunklist.m3u8');
-        path = path.replace(/\/media.*\.m3u8.*$/, '/media.m3u8');
-        path = path.replace(/\d+\.m3u8/, 'index.m3u8');
+        path = path.replace(/\/chunklist.*\.m3u8.*$/, '/playlist.m3u8');
+        path = path.replace(/\/media_.*\.m3u8.*$/, '/media.m3u8');
+        path = path.replace(/\/\d+\.m3u8/, '/index.m3u8');
+        path = path.replace(/\/[a-z0-9]+_\d+\.m3u8/i, '/quality.m3u8');
 
         return urlObj.origin + path;
     } catch (e) {
@@ -337,7 +345,7 @@ async function downloadStream(streamId, qualityIndex) {
         }
 
         // Merge segments into single blob
-        const mergedBlob = new Blob(segmentData, { type: 'video/mp2t' });
+        const mergedBlob = new Blob(segmentData, { type: 'video/mp4' });
 
         // Convert blob to base64 data URL (service workers can't use URL.createObjectURL)
         const reader = new FileReader();
@@ -345,7 +353,7 @@ async function downloadStream(streamId, qualityIndex) {
             const base64data = reader.result;
 
             // Trigger download
-            const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.ts`;
+            const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.mp4`;
 
             chrome.downloads.download({
                 url: base64data,
