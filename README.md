@@ -46,7 +46,9 @@ A powerful Chrome/Edge browser extension for detecting and downloading HLS (.m3u
 
 4. **Manage downloads**
    - Downloads appear in your browser's download manager
-   - Files are saved as `.ts` format (compatible with most video players)
+   - Files are saved as `.ts` format (Transport Stream)
+   - **Why .ts?** TS segments concatenate seamlessly without gaps
+   - **Want MP4?** Use FFmpeg to convert: `ffmpeg -i video.ts -c copy video.mp4`
 
 ## ⚙️ Settings
 
