@@ -248,26 +248,30 @@ async function downloadStream(streamId, qualityIndex) {
         // Merge segments into single blob
         const mergedBlob = new Blob(segmentData, { type: 'video/mp2t' });
 
-        // Create download URL
-        const downloadUrl = URL.createObjectURL(mergedBlob);
+        // Convert blob to base64 data URL (service workers can't use URL.createObjectURL)
+        const reader = new FileReader();
+        reader.onloadend = function () {
+            const base64data = reader.result;
 
-        // Trigger download
-        const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.ts`;
+            // Trigger download
+            const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.ts`;
 
-        chrome.downloads.download({
-            url: downloadUrl,
-            filename: sanitizeFilename(filename),
-            saveAs: true
-        }, (downloadId) => {
-            if (downloadId) {
-                downloadProgress[streamId].status = 'completed';
+            chrome.downloads.download({
+                url: base64data,
+                filename: sanitizeFilename(filename),
+                saveAs: true
+            }, (downloadId) => {
+                if (downloadId) {
+                    downloadProgress[streamId].status = 'completed';
 
-                chrome.runtime.sendMessage({
-                    type: 'DOWNLOAD_COMPLETED',
-                    streamId: streamId
-                }).catch(() => { });
-            }
-        });
+                    chrome.runtime.sendMessage({
+                        type: 'DOWNLOAD_COMPLETED',
+                        streamId: streamId
+                    }).catch(() => { });
+                }
+            });
+        };
+        reader.readAsDataURL(mergedBlob);
 
     } catch (error) {
         console.error('Error downloading stream:', error);
