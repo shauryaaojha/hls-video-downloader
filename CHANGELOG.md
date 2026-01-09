@@ -1,5 +1,26 @@
 # Changelog
 
+## Version 1.0.2 - 2026-01-09
+
+### 🎯 Major Improvement
+- **Smart Deduplication**: Fixed issue where 100+ duplicate streams were detected
+  - Implemented URL fingerprinting to identify unique videos
+  - Only show master playlists when available
+  - Automatically remove duplicate media playlists
+  - Filter out repeated playlist fetches during video playback
+
+### 🔧 Technical Changes
+- Added `getUrlFingerprint()` function for URL comparison
+- Added `isSimilarUrl()` for detecting duplicate streams
+- Added `removeDuplicateMediaPlaylists()` to clean up redundant entries
+- Track detected URLs with `Set` for fast lookup
+- Prefer master playlists over individual quality variants
+
+**Result**: Now shows **1 stream per video** instead of 100+
+
+---
+
+
 ## Version 1.0.1 - 2026-01-09
 
 ### 🐛 Bug Fixes
