@@ -1,9 +1,15 @@
 // HLS Video Downloader - Background Service Worker
+// Optimized for minimal memory consumption
 
 // Store for detected HLS streams
 let detectedStreams = {};
 let downloadProgress = {};
 let detectedUrls = new Set(); // Track URLs to prevent duplicates
+
+// Memory optimization: Stream limits
+const MAX_STREAMS = 50; // Maximum number of streams to keep
+const STREAM_TIMEOUT = 3600000; // Auto-remove streams older than 1 hour (in ms)
+const PROGRESS_CLEANUP_TIMEOUT = 300000; // Cleanup download progress after 5 minutes
 
 // Listen for installation
 chrome.runtime.onInstalled.addListener(() => {
@@ -83,6 +89,9 @@ async function detectHLSStream(details) {
 
         // Parse playlist to get qualities
         parsePlaylist(streamId, url);
+
+        // Memory optimization: Enforce stream limit
+        enforceStreamLimit();
 
         // Update storage
         chrome.storage.local.set({ streams: detectedStreams });
@@ -281,7 +290,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // Keep channel open for async response
 });
 
-// Download HLS stream
+// Download HLS stream with memory optimization
 async function downloadStream(streamId, qualityIndex) {
     const stream = detectedStreams[streamId];
     if (!stream) {
@@ -319,29 +328,45 @@ async function downloadStream(streamId, qualityIndex) {
 
         downloadProgress[streamId].total = segments.length;
 
-        // Download segments
-        const segmentData = [];
-        for (let i = 0; i < segments.length; i++) {
-            const segmentUrl = segments[i];
+        // Memory optimization: Process segments in batches
+        const BATCH_SIZE = 10; // Process 10 segments at a time
+        const allSegmentData = [];
 
-            try {
-                const segmentResponse = await fetch(segmentUrl);
-                const segmentBlob = await segmentResponse.blob();
-                segmentData.push(segmentBlob);
+        for (let batchStart = 0; batchStart < segments.length; batchStart += BATCH_SIZE) {
+            const batchEnd = Math.min(batchStart + BATCH_SIZE, segments.length);
+            const batchSegments = segments.slice(batchStart, batchEnd);
 
-                downloadProgress[streamId].downloaded = i + 1;
-                downloadProgress[streamId].progress = Math.round(((i + 1) / segments.length) * 100);
+            // Download batch
+            const batchPromises = batchSegments.map(async (segmentUrl) => {
+                try {
+                    const segmentResponse = await fetch(segmentUrl);
+                    const arrayBuffer = await segmentResponse.arrayBuffer();
+                    return new Uint8Array(arrayBuffer);
+                } catch (error) {
+                    console.error('Error downloading segment:', error);
+                    return null;
+                }
+            });
 
-                // Notify popup of progress
-                chrome.runtime.sendMessage({
-                    type: 'DOWNLOAD_PROGRESS',
-                    streamId: streamId,
-                    progress: downloadProgress[streamId]
-                }).catch(() => { });
+            const batchResults = await Promise.all(batchPromises);
 
-            } catch (error) {
-                console.error('Error downloading segment:', error);
-            }
+            // Filter out failed downloads and add to collection
+            batchResults.forEach(result => {
+                if (result) {
+                    allSegmentData.push(result);
+                }
+            });
+
+            // Update progress
+            downloadProgress[streamId].downloaded = batchEnd;
+            downloadProgress[streamId].progress = Math.round((batchEnd / segments.length) * 100);
+
+            // Notify popup of progress
+            chrome.runtime.sendMessage({
+                type: 'DOWNLOAD_PROGRESS',
+                streamId: streamId,
+                progress: downloadProgress[streamId]
+            }).catch(() => { });
         }
 
         // Import mux.js for proper TS to MP4 conversion
@@ -366,50 +391,13 @@ async function downloadStream(streamId, qualityIndex) {
             });
 
             transmuxer.on('done', () => {
-                // Merge all MP4 segments
+                // Memory optimization: Create blob and use object URL instead of base64
                 const mergedBlob = new Blob(mp4Segments, { type: 'video/mp4' });
-
-                // Convert to base64 and download
-                const reader = new FileReader();
-                reader.onloadend = function () {
-                    const base64data = reader.result;
-                    const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.mp4`;
-
-                    chrome.downloads.download({
-                        url: base64data,
-                        filename: sanitizeFilename(filename),
-                        saveAs: true
-                    }, (downloadId) => {
-                        if (downloadId) {
-                            downloadProgress[streamId].status = 'completed';
-                            chrome.runtime.sendMessage({
-                                type: 'DOWNLOAD_COMPLETED',
-                                streamId: streamId
-                            }).catch(() => { });
-                        }
-                    });
-                };
-                reader.readAsDataURL(mergedBlob);
-            });
-
-            // Feed TS segments to transmuxer
-            for (const segment of segmentData) {
-                const arrayBuffer = await segment.arrayBuffer();
-                transmuxer.push(new Uint8Array(arrayBuffer));
-            }
-            transmuxer.flush();
-
-        } else {
-            // Fallback: simple concatenation as TS
-            const mergedBlob = new Blob(segmentData, { type: 'video/mp2t' });
-
-            const reader = new FileReader();
-            reader.onloadend = function () {
-                const base64data = reader.result;
-                const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.ts`;
+                const objectUrl = URL.createObjectURL(mergedBlob);
+                const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.mp4`;
 
                 chrome.downloads.download({
-                    url: base64data,
+                    url: objectUrl,
                     filename: sanitizeFilename(filename),
                     saveAs: true
                 }, (downloadId) => {
@@ -419,10 +407,55 @@ async function downloadStream(streamId, qualityIndex) {
                             type: 'DOWNLOAD_COMPLETED',
                             streamId: streamId
                         }).catch(() => { });
+
+                        // Memory optimization: Cleanup after download starts
+                        setTimeout(() => {
+                            URL.revokeObjectURL(objectUrl);
+                            cleanupDownloadProgress(streamId);
+                        }, 5000);
                     }
                 });
-            };
-            reader.readAsDataURL(mergedBlob);
+
+                // Memory optimization: Clear segment arrays immediately
+                mp4Segments.length = 0;
+                allSegmentData.length = 0;
+            });
+
+            // Feed TS segments to transmuxer
+            for (const segment of allSegmentData) {
+                transmuxer.push(segment);
+            }
+            transmuxer.flush();
+
+        } else {
+            // Fallback: simple concatenation as TS
+            // Memory optimization: Use object URL instead of base64
+            const mergedBlob = new Blob(allSegmentData, { type: 'video/mp2t' });
+            const objectUrl = URL.createObjectURL(mergedBlob);
+            const filename = `${stream.tabTitle || 'video'}_${quality.resolution}.ts`;
+
+            chrome.downloads.download({
+                url: objectUrl,
+                filename: sanitizeFilename(filename),
+                saveAs: true
+            }, (downloadId) => {
+                if (downloadId) {
+                    downloadProgress[streamId].status = 'completed';
+                    chrome.runtime.sendMessage({
+                        type: 'DOWNLOAD_COMPLETED',
+                        streamId: streamId
+                    }).catch(() => { });
+
+                    // Memory optimization: Cleanup after download starts
+                    setTimeout(() => {
+                        URL.revokeObjectURL(objectUrl);
+                        cleanupDownloadProgress(streamId);
+                    }, 5000);
+                }
+            });
+
+            // Memory optimization: Clear segment array
+            allSegmentData.length = 0;
         }
 
     } catch (error) {
@@ -435,6 +468,9 @@ async function downloadStream(streamId, qualityIndex) {
             streamId: streamId,
             error: error.message
         }).catch(() => { });
+
+        // Memory optimization: Cleanup on error
+        cleanupDownloadProgress(streamId);
     }
 }
 
@@ -462,3 +498,85 @@ function generateStreamId() {
 function sanitizeFilename(filename) {
     return filename.replace(/[^a-z0-9_\-\.]/gi, '_').substring(0, 200);
 }
+
+// Memory optimization: Cleanup download progress
+function cleanupDownloadProgress(streamId) {
+    if (downloadProgress[streamId]) {
+        delete downloadProgress[streamId];
+        console.log('Cleaned up download progress for:', streamId);
+    }
+}
+
+// Memory optimization: Enforce max stream limit
+function enforceStreamLimit() {
+    const streamIds = Object.keys(detectedStreams);
+
+    if (streamIds.length > MAX_STREAMS) {
+        // Sort by timestamp (oldest first)
+        streamIds.sort((a, b) => {
+            return detectedStreams[a].timestamp - detectedStreams[b].timestamp;
+        });
+
+        // Remove oldest streams
+        const toRemove = streamIds.slice(0, streamIds.length - MAX_STREAMS);
+        toRemove.forEach(id => {
+            const stream = detectedStreams[id];
+            if (stream) {
+                detectedUrls.delete(stream.fingerprint);
+            }
+            delete detectedStreams[id];
+        });
+
+        console.log(`Removed ${toRemove.length} old streams (limit: ${MAX_STREAMS})`);
+
+        // Update storage and badge
+        chrome.storage.local.set({ streams: detectedStreams });
+        chrome.action.setBadgeText({ text: Object.keys(detectedStreams).length.toString() });
+    }
+}
+
+// Memory optimization: Remove old streams (older than STREAM_TIMEOUT)
+function removeOldStreams() {
+    const now = Date.now();
+    const toRemove = [];
+
+    for (const [id, stream] of Object.entries(detectedStreams)) {
+        if (now - stream.timestamp > STREAM_TIMEOUT) {
+            toRemove.push(id);
+        }
+    }
+
+    toRemove.forEach(id => {
+        const stream = detectedStreams[id];
+        if (stream) {
+            detectedUrls.delete(stream.fingerprint);
+        }
+        delete detectedStreams[id];
+    });
+
+    if (toRemove.length > 0) {
+        console.log(`Removed ${toRemove.length} expired streams`);
+        chrome.storage.local.set({ streams: detectedStreams });
+        chrome.action.setBadgeText({
+            text: Object.keys(detectedStreams).length > 0 ? Object.keys(detectedStreams).length.toString() : ''
+        });
+    }
+}
+
+// Memory optimization: Periodic cleanup
+setInterval(() => {
+    removeOldStreams();
+
+    // Cleanup stale download progress
+    const now = Date.now();
+    for (const [streamId, progress] of Object.entries(downloadProgress)) {
+        if (progress.status === 'completed' || progress.status === 'error') {
+            // If completed/errored more than 5 minutes ago, cleanup
+            if (!progress.completedTime) {
+                progress.completedTime = now;
+            } else if (now - progress.completedTime > PROGRESS_CLEANUP_TIMEOUT) {
+                cleanupDownloadProgress(streamId);
+            }
+        }
+    }
+}, 60000); // Run every minute

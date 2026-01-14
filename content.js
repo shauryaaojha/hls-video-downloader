@@ -1,8 +1,43 @@
 // HLS Video Downloader - Content Script
+// Optimized for minimal memory consumption
 
-// Monitor network requests for HLS streams
 (function () {
     'use strict';
+
+    // Memory optimization: Track sent URLs to prevent duplicate messages
+    const recentlySentUrls = new Set();
+    const URL_CACHE_TIMEOUT = 5000; // Clear URL from cache after 5 seconds
+
+    // Memory optimization: Debounce timer for video monitoring
+    let monitorDebounceTimer = null;
+    const MONITOR_DEBOUNCE_DELAY = 300;
+
+    // Memory optimization: Limit active notifications
+    const MAX_NOTIFICATIONS = 2;
+    const activeNotifications = [];
+
+    // Memory optimization: Reusable style tag
+    let styleElement = null;
+
+    // Helper: Send message with deduplication
+    function sendHLSMessage(url, source) {
+        if (!url || recentlySentUrls.has(url)) {
+            return; // Skip duplicate
+        }
+
+        recentlySentUrls.add(url);
+
+        chrome.runtime.sendMessage({
+            type: 'HLS_DETECTED',
+            url: url,
+            source: source
+        }).catch(() => { });
+
+        // Clear from cache after timeout
+        setTimeout(() => {
+            recentlySentUrls.delete(url);
+        }, URL_CACHE_TIMEOUT);
+    }
 
     // Override fetch to detect HLS requests
     const originalFetch = window.fetch;
@@ -10,12 +45,7 @@
         const url = args[0];
 
         if (typeof url === 'string' && url.includes('.m3u8')) {
-            // Notify background about HLS stream
-            chrome.runtime.sendMessage({
-                type: 'HLS_DETECTED',
-                url: url,
-                source: 'fetch'
-            }).catch(() => { });
+            sendHLSMessage(url, 'fetch');
         }
 
         return originalFetch.apply(this, args);
@@ -25,18 +55,13 @@
     const originalOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function (method, url, ...rest) {
         if (typeof url === 'string' && url.includes('.m3u8')) {
-            // Notify background about HLS stream
-            chrome.runtime.sendMessage({
-                type: 'HLS_DETECTED',
-                url: url,
-                source: 'xhr'
-            }).catch(() => { });
+            sendHLSMessage(url, 'xhr');
         }
 
         return originalOpen.call(this, method, url, ...rest);
     };
 
-    // Monitor video elements
+    // Monitor video elements (debounced)
     function monitorVideoElements() {
         const videos = document.getElementsByTagName('video');
 
@@ -44,11 +69,7 @@
             // Check if video has HLS source
             const src = video.src || video.currentSrc;
             if (src && src.includes('.m3u8')) {
-                chrome.runtime.sendMessage({
-                    type: 'HLS_DETECTED',
-                    url: src,
-                    source: 'video-element'
-                }).catch(() => { });
+                sendHLSMessage(src, 'video-element');
             }
 
             // Check source elements
@@ -56,14 +77,18 @@
             for (const source of sources) {
                 const srcUrl = source.src;
                 if (srcUrl && srcUrl.includes('.m3u8')) {
-                    chrome.runtime.sendMessage({
-                        type: 'HLS_DETECTED',
-                        url: srcUrl,
-                        source: 'source-element'
-                    }).catch(() => { });
+                    sendHLSMessage(srcUrl, 'source-element');
                 }
             }
         }
+    }
+
+    // Debounced monitor function
+    function debouncedMonitor() {
+        if (monitorDebounceTimer) {
+            clearTimeout(monitorDebounceTimer);
+        }
+        monitorDebounceTimer = setTimeout(monitorVideoElements, MONITOR_DEBOUNCE_DELAY);
     }
 
     // Initial scan
@@ -73,10 +98,8 @@
         monitorVideoElements();
     }
 
-    // Monitor for dynamically added videos
-    const observer = new MutationObserver(() => {
-        monitorVideoElements();
-    });
+    // Monitor for dynamically added videos (debounced)
+    const observer = new MutationObserver(debouncedMonitor);
 
     observer.observe(document.body, {
         childList: true,
@@ -91,6 +114,14 @@
     });
 
     function showNotification(text) {
+        // Memory optimization: Remove oldest notification if limit reached
+        if (activeNotifications.length >= MAX_NOTIFICATIONS) {
+            const oldest = activeNotifications.shift();
+            if (oldest && oldest.parentNode) {
+                oldest.remove();
+            }
+        }
+
         // Create notification element
         const notification = document.createElement('div');
         notification.textContent = text;
@@ -110,28 +141,37 @@
       animation: slideIn 0.3s ease-out;
     `;
 
-        // Add animation
-        const style = document.createElement('style');
-        style.textContent = `
-      @keyframes slideIn {
-        from {
-          transform: translateX(400px);
-          opacity: 0;
+        // Memory optimization: Reuse style element instead of creating new ones
+        if (!styleElement) {
+            styleElement = document.createElement('style');
+            styleElement.textContent = `
+        @keyframes slideIn {
+          from {
+            transform: translateX(400px);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
         }
-        to {
-          transform: translateX(0);
-          opacity: 1;
+      `;
+            document.head.appendChild(styleElement);
         }
-      }
-    `;
-        document.head.appendChild(style);
 
         document.body.appendChild(notification);
+        activeNotifications.push(notification);
 
         // Remove after 3 seconds
         setTimeout(() => {
             notification.style.animation = 'slideIn 0.3s ease-out reverse';
-            setTimeout(() => notification.remove(), 300);
+            setTimeout(() => {
+                notification.remove();
+                const index = activeNotifications.indexOf(notification);
+                if (index > -1) {
+                    activeNotifications.splice(index, 1);
+                }
+            }, 300);
         }, 3000);
     }
 })();
